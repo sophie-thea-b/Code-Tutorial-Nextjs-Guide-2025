@@ -9,9 +9,15 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
 const InvoiceFormSchema = z.object({
   id: z.string(),
-  customerId: z.string(),
-  amount: z.coerce.number(),
-  status: z.enum(['pending', 'paid']),
+  customerId: z.string({
+    invalid_type_error: 'Please select a customer.'
+  }),
+  amount: z.coerce
+    .number()
+    .gt(0, { message: 'Please enter an amount greater than $0.'}),
+  status: z.enum(['pending', 'paid'], {
+    invalid_type_error: 'Please select an invoice status.'
+  }),
   date: z.string(),
 });
 
@@ -20,16 +26,35 @@ const CreateInvoiceSchema = InvoiceFormSchema.omit({
   date: true,
 });
 
-export async function createInvoiceAction(formData: FormData) {
-  const { customerId, amount, status } = CreateInvoiceSchema.parse({
+export type State = {
+  errors?: {
+    customerId?: string[];
+    amount?: string[];
+    status?: string[];
+  };
+  message?: string | null;
+};
+
+export async function createInvoiceAction(prevState: State, formData: FormData) {
+  const validatedFields = CreateInvoiceSchema.safeParse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
     status: formData.get('status'),
   });
+  
+  // Form validation failed
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing fields. Failed to create invoice.'
+    }
+  }
 
-  const amountInCents = amount * 100;
+  // Prepare data
+  const amountInCents = validatedFields.data.amount * 100;
   const date = new Date().toISOString().split('T')[0];
 
+  // Insert data into the database
   try {
     await sql`
         INSERT INTO invoices (customer_id, amount, status, date)
@@ -43,7 +68,7 @@ export async function createInvoiceAction(formData: FormData) {
     };
   }
 
-
+  // Revalidate cache and redirect to the invoices page
   revalidatePath('/dashboard/invoices');
   redirect('/dashboard/invoices');
 }
