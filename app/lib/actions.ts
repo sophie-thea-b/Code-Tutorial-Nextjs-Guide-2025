@@ -4,19 +4,21 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import postgres from 'postgres';
 import { redirect } from 'next/navigation';
+import { signIn } from '@/auth';
+import { AuthError } from 'next-auth';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
 const InvoiceFormSchema = z.object({
   id: z.string(),
   customerId: z.string({
-    invalid_type_error: 'Please select a customer.'
+    invalid_type_error: 'Please select a customer.',
   }),
   amount: z.coerce
     .number()
-    .gt(0, { message: 'Please enter an amount greater than $0.'}),
+    .gt(0, { message: 'Please enter an amount greater than $0.' }),
   status: z.enum(['pending', 'paid'], {
-    invalid_type_error: 'Please select an invoice status.'
+    invalid_type_error: 'Please select an invoice status.',
   }),
   date: z.string(),
 });
@@ -41,13 +43,13 @@ export async function createInvoiceAction(prevState: State, formData: FormData) 
     amount: formData.get('amount'),
     status: formData.get('status'),
   });
-  
+
   // Form validation failed
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing fields. Failed to create invoice.'
-    }
+      message: 'Missing fields. Failed to create invoice.',
+    };
   }
 
   // Prepare data
@@ -105,9 +107,29 @@ export async function updateInvoiceAction(id: string, formData: FormData) {
 
 export async function deleteInvoiceAction(id: string) {
   throw new Error('Failed to Delete Invoice');
-  
+
   await sql`DELETE
             FROM invoices
             WHERE id = ${id}`;
   revalidatePath('/dashboard/invoices');
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData,
+) {
+  try {
+    await signIn('credentials', formData);
+  } catch (error) {
+    if (error) {
+      if (error instanceof AuthError) {
+        switch (error.type) {
+          case 'CredentialsSignin':
+            return 'Invalid credentials.';
+          default:
+            return 'Something went wrong';
+        }
+      }
+    }
+  }
 }
