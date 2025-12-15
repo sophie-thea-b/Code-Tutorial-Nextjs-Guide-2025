@@ -79,13 +79,25 @@ export async function createInvoiceAction(prevState: State, formData: FormData) 
 // Use Zod to update the expected types
 const UpdateInvoiceSchema = InvoiceFormSchema.omit({ id: true, date: true });
 
-export async function updateInvoiceAction(id: string, formData: FormData) {
-  const { customerId, amount, status } = UpdateInvoiceSchema.parse({
+export async function updateInvoiceAction(
+  id: string,
+  prevState: State,
+  formData: FormData,
+) {
+  const validatedFields = UpdateInvoiceSchema.safeParse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
     status: formData.get('status'),
   });
 
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Update Invoice.',
+    };
+  }
+
+  const { customerId, amount, status } = validatedFields.data;
   const amountInCents = amount * 100;
 
   try {
