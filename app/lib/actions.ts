@@ -53,6 +53,7 @@ export async function createInvoiceAction(prevState: State, formData: FormData) 
   }
 
   // Prepare data
+  const customerId = validatedFields.data.customerId;
   const amountInCents = validatedFields.data.amount * 100;
   const date = new Date().toISOString().split('T')[0];
 
